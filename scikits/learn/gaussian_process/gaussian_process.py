@@ -21,6 +21,7 @@ if hasattr(linalg, 'solve_triangular'):
     solve_triangular = linalg.solve_triangular
 else:
     # slower, but works
+
     def solve_triangular(x, y, lower=True):
         return linalg.solve(x, y)
 
@@ -60,7 +61,6 @@ def l1_cross_distances(X):
         D[ll_0:ll_1] = np.abs(X[k] - X[(k + 1):n_samples])
 
     return D, ij.astype(np.int)
-
 
 
 class GaussianProcess(BaseEstimator, RegressorMixin):
@@ -222,9 +222,10 @@ class GaussianProcess(BaseEstimator, RegressorMixin):
         # Run input checks
         self._check_params()
 
-        #logger local to ths class
-        self.logger, self.log, self.set_log_threshold = logtools('scikits.learn.gaussian_process')
-        #adapt logger verbosity
+        # logger local to this class
+        self.logger, self.log, self.set_log_threshold = logtools(
+                                'scikits.learn.gaussian_process')
+        # adapt logger verbosity
         if self.verbose:
             self.set_log_threshold(DEBUG)
 
@@ -319,7 +320,8 @@ class GaussianProcess(BaseEstimator, RegressorMixin):
         # Determine Gaussian Process model parameters
         if self.thetaL is not None and self.thetaU is not None:
             # Maximum Likelihood Estimation of the parameters
-            self.logger.debug("Performing Maximum Likelihood Estimation of the "
+            self.logger.debug(
+                    "Performing Maximum Likelihood Estimation of the "
                     "autocorrelation parameters...")
             self.theta, self.reduced_likelihood_function_value, par = \
                 self.arg_max_reduced_likelihood_function()
@@ -433,7 +435,8 @@ class GaussianProcess(BaseEstimator, RegressorMixin):
                 C = self.C
                 if C is None:
                     # Light storage mode (need to recompute C, F, Ft and G)
-                    self.debug("This GaussianProcess used 'light' storage mode "
+                    self.debug(
+                            "This GaussianProcess used 'light' storage mode "
                             "at instanciation. Need to recompute "
                             "autocorrelation matrix...")
                     reduced_likelihood_function_value, par = \
