@@ -11,10 +11,11 @@ import warnings
 
 from ..base import BaseEstimator
 from ..metrics import euclidean_distances
-from ..utils import check_random_state, check_arrays
+from ..utils import check_random_state
 from ..externals.joblib import Parallel
 from ..externals.joblib import delayed
 from ..isotonic import IsotonicRegression
+from ..decomposition import PCA
 
 
 def _smacof_single(similarities, metric=True, n_components=2, init=None,
@@ -25,7 +26,7 @@ def _smacof_single(similarities, metric=True, n_components=2, init=None,
     Parameters
     ----------
     similarities: symmetric ndarray, shape [n * n]
-        similarities between the points
+        similarities between the points. nan entries are considered as unkowns
 
     metric: boolean, optional, default: True
         compute metric or nonmetric SMACOF algorithm
@@ -73,7 +74,7 @@ def _smacof_single(similarities, metric=True, n_components=2, init=None,
         raise ValueError("similarities must be symmetric")
 
     sim_flat = ((1 - np.tri(n_samples)) * similarities).ravel()
-    sim_flat_w = sim_flat[sim_flat != 0]
+    sim_flat_w = sim_flat[np.isnan(sim_flat) == False]
     if init is None:
         # Randomly choose initial configuration
         X = random_state.rand(n_samples * n_components)
@@ -94,21 +95,24 @@ def _smacof_single(similarities, metric=True, n_components=2, init=None,
 
         if metric:
             disparities = similarities
+            disparities[np.isnan(disparities)] = 0
         else:
             dis_flat = dis.ravel()
             # similarities with 0 are considered as missing values
-            dis_flat_w = dis_flat[sim_flat != 0]
+            dis_flat_w = dis_flat[np.isnan(sim_flat) == False]
 
             # Compute the disparities using a monotonic regression
             disparities_flat = ir.fit_transform(sim_flat_w, dis_flat_w)
             disparities = dis_flat.copy()
-            disparities[sim_flat != 0] = disparities_flat
+            disparities[np.isfinite(sim_flat)] = disparities_flat
             disparities = disparities.reshape((n_samples, n_samples))
             disparities *= np.sqrt((n_samples * (n_samples - 1) / 2) /
                                    (disparities ** 2).sum())
 
         # Compute stress
-        stress = ((dis.ravel() - disparities.ravel()) ** 2).sum() / 2
+        stress = ((dis[np.isfinite(disparities)].ravel() -
+                   disparities[np.isfinite(disparities)].ravel()) ** 2).sum()
+        stress /= 2
 
         # Update X using the Guttman transform
         dis[dis == 0] = 1e-5
@@ -220,7 +224,6 @@ def smacof(similarities, metric=True, n_components=2, init=None, n_init=8,
     hypothesis" Kruskal, J. Psychometrika, 29, (1964)
     """
 
-    similarities, = check_arrays(similarities, sparse_format='dense')
     random_state = check_random_state(random_state)
 
     if hasattr(init, '__array__'):
@@ -388,10 +391,19 @@ class MDS(BaseEstimator):
             raise ValueError("Proximity must be 'precomputed' or 'euclidean'."
                              " Got %s instead" % str(self.dissimilarity))
 
-        self.embedding_, self.stress_ = smacof(
-            self.dissimilarity_matrix_, metric=self.metric,
-            n_components=self.n_components, init=init, n_init=self.n_init,
-            n_jobs=self.n_jobs, max_iter=self.max_iter, verbose=self.verbose,
-            eps=self.eps, random_state=self.random_state)
+        if not np.any(np.isnan(X)) and self.metric:
+            print 'Using PCA'
+            clf = PCA(n_components=self.n_components)
+            self.embedding_ = clf.fit_transform(X)
+            self.stress_ = ((euclidean_distances(self.embedding_) - X) **
+                            2).sum() / 2
+
+        else:
+            self.embedding_, self.stress_ = smacof(
+                self.dissimilarity_matrix_, metric=self.metric,
+                n_components=self.n_components, init=init, n_init=self.n_init,
+                n_jobs=self.n_jobs, max_iter=self.max_iter,
+                verbose=self.verbose,
+                eps=self.eps, random_state=self.random_state)
 
         return self.embedding_
