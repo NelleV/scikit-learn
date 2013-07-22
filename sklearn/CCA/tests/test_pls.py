@@ -1,7 +1,8 @@
 import numpy as np
 from sklearn.utils.testing import assert_array_almost_equal
 from sklearn.datasets import load_linnerud
-from sklearn import pls
+from sklearn.CCA import pls
+from sklearn.CCA import cca
 
 
 def test_pls():
@@ -229,7 +230,7 @@ def test_scale():
     # causes X[:, -1].std() to be zero
     X[:, -1] = 1.0
 
-    for clf in [pls.PLSCanonical(), pls.PLSRegression(), pls.CCA(),
+    for clf in [pls.PLSCanonical(), pls.PLSRegression(), cca.CCA(),
                 pls.PLSSVD()]:
         clf.set_params(scale=True)
         clf.fit(X, Y)
