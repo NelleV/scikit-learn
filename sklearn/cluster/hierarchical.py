@@ -1,7 +1,7 @@
 """Hierarchical Agglomerative Clustering
 
 These routines perform some hierachical agglomerative clustering of some
-input data. Currently, only Ward's algorithm is implemented.
+input data.
 
 Authors : Vincent Michel, Bertrand Thirion, Alexandre Gramfort,
           Gael Varoquaux
@@ -394,7 +394,7 @@ def linkage_tree(X, connectivity=None, n_components=None, copy=True,
         used_node[i] = used_node[j] = False
 
         # update the structure matrix A and the inertia matrix
-        # a clever 'min' operation between A[i] and A[j]
+        # a clever 'min', or 'max' operation between A[i] and A[j]
         coord_col = join_func(A[i], A[j], used_node, n_i, n_j)
         for l, d in coord_col:
             A[l].append(k, d)
@@ -412,6 +412,7 @@ def linkage_tree(X, connectivity=None, n_components=None, copy=True,
     return children, n_components, n_leaves, parent
 
 
+# Matching names to tree-building strategies
 def _complete_linkage(*args, **kwargs):
     kwargs['linkage'] = 'complete'
     return linkage_tree(*args, **kwargs)
@@ -422,7 +423,6 @@ def _average_linkage(*args, **kwargs):
     return linkage_tree(*args, **kwargs)
 
 
-# Matching names to tree-building strategies
 _TREE_BUILDERS = dict(
     ward=ward_tree,
     complete=_complete_linkage,
@@ -571,7 +571,7 @@ class LinkageAgglomeration(HierarchicalLinkage, AgglomerationTransform):
 
 
 ###############################################################################
-# Backward compatibility: c:lass for Ward hierarchical clustering
+# Backward compatibility: class for Ward hierarchical clustering
 
 class Ward(HierarchicalLinkage):
     """Ward hierarchical clustering: constructs a tree and cuts it.
