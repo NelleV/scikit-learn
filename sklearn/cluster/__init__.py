@@ -7,7 +7,8 @@ from .spectral import spectral_clustering, SpectralClustering
 from .mean_shift_ import mean_shift, MeanShift, estimate_bandwidth, \
     get_bin_seeds
 from .affinity_propagation_ import affinity_propagation, AffinityPropagation
-from .hierarchical import ward_tree, Ward, WardAgglomeration
+from .hierarchical import ward_tree, Ward, WardAgglomeration, \
+    AgglomerativeClustering
 from .k_means_ import k_means, KMeans, MiniBatchKMeans
 from .dbscan_ import dbscan, DBSCAN
 from .bicluster import SpectralBiclustering, SpectralCoclustering
@@ -24,6 +25,7 @@ def spectral_embedding(*args, **kwargs):
 
 
 __all__ = ['AffinityPropagation',
+           'AgglomerativeClustering',
            'DBSCAN',
            'KMeans',
            'MeanShift',
