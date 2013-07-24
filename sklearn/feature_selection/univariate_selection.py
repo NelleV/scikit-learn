@@ -8,16 +8,33 @@
 
 from abc import ABCMeta, abstractmethod
 from warnings import warn
+from functools import reduce
 
 import numpy as np
-from scipy import stats
+from scipy import special, stats
 from scipy.sparse import issparse
 
-from ..base import BaseEstimator, TransformerMixin
+from ..base import BaseEstimator
 from ..preprocessing import LabelBinarizer
-from ..utils import (array2d, atleast2d_or_csr, check_arrays, safe_asarray,
-                     safe_sqr, safe_mask)
+from ..utils import (array2d, as_float_array,
+                     atleast2d_or_csr, check_arrays, safe_asarray, safe_sqr,
+                     safe_mask)
 from ..utils.extmath import safe_sparse_dot
+from ..externals import six
+from .base import SelectorMixin
+
+
+def _clean_nans(scores):
+    """
+    Fixes Issue #1240: NaNs can't be properly compared, so change them to the
+    smallest value of scores's dtype. -inf seems to be unreliable.
+    """
+    # XXX where should this function be called? fit? scoring functions
+    # themselves?
+    scores = as_float_array(scores, copy=True)
+    scores[np.isnan(scores)] = np.finfo(scores.dtype).min
+    return scores
+
 
 ######################################################################
 # Scoring functions
@@ -30,7 +47,7 @@ def f_oneway(*args):
     """Performs a 1-way ANOVA.
 
     The one-way ANOVA tests the null hypothesis that 2 or more groups have
-    the same population mean.  The test is applied to samples from two or
+    the same population mean. The test is applied to samples from two or
     more groups, possibly with differing sizes.
 
     Parameters
@@ -41,9 +58,9 @@ def f_oneway(*args):
     Returns
     -------
     F-value : float
-        The computed F-value of the test
+        The computed F-value of the test.
     p-value : float
-        The associated p-value from the F-distribution
+        The associated p-value from the F-distribution.
 
     Notes
     -----
@@ -79,7 +96,7 @@ def f_oneway(*args):
     n_samples_per_class = np.array([a.shape[0] for a in args])
     n_samples = np.sum(n_samples_per_class)
     ss_alldata = reduce(lambda x, y: x + y,
-            [safe_sqr(a).sum(axis=0) for a in args])
+                        [safe_sqr(a).sum(axis=0) for a in args])
     sums_args = [a.sum(axis=0) for a in args]
     square_of_sums_alldata = safe_sqr(reduce(lambda x, y: x + y, sums_args))
     square_of_sums_args = [safe_sqr(s) for s in sums_args]
@@ -106,29 +123,49 @@ def f_classif(X, y):
     Parameters
     ----------
     X : {array-like, sparse matrix} shape = [n_samples, n_features]
-        The set of regressors that will tested sequentially
+        The set of regressors that will tested sequentially.
+
     y : array of shape(n_samples)
-        The data matrix
+        The data matrix.
 
     Returns
     -------
     F : array, shape = [n_features,]
-        The set of F values
+        The set of F values.
+
     pval : array, shape = [n_features,]
-        The set of p-values
+        The set of p-values.
     """
     X, y = check_arrays(X, y)
     args = [X[safe_mask(X, y == k)] for k in np.unique(y)]
     return f_oneway(*args)
 
 
+def _chisquare(f_obs, f_exp):
+    """Fast replacement for scipy.stats.chisquare.
+
+    Version from https://github.com/scipy/scipy/pull/2525 with additional
+    optimizations.
+    """
+    f_obs = np.asarray(f_obs, dtype=np.float64)
+
+    k = len(f_obs)
+    # Reuse f_obs for χ² statistics
+    chisq = f_obs
+    chisq -= f_exp
+    chisq **= 2
+    chisq /= f_exp
+    chisq = chisq.sum(axis=0)
+    return chisq, special.chdtrc(k - 1, chisq)
+
+
 def chi2(X, y):
     """Compute χ² (chi-squared) statistic for each class/feature combination.
 
     This score can be used to select the n_features features with the
-    highest values for the χ² (chi-square) statistic from either boolean or
-    multinomially distributed data (e.g., term counts in document
-    classification) relative to the classes.
+    highest values for the χ² (chi-square) statistic from X, which must
+    contain booleans or frequencies (e.g., term counts in document
+    classification), relative to the classes.
 
     Recall that the χ² statistic measures dependence between stochastic
     variables, so using this function "weeds out" the features that are the
@@ -158,6 +195,9 @@ def chi2(X, y):
     # XXX: we might want to do some of the following in logspace instead for
     # numerical stability.
     X = atleast2d_or_csr(X)
+    if np.any((X.data if issparse(X) else X) < 0):
+        raise ValueError("Input X must be non-negative.")
+
     Y = LabelBinarizer().fit_transform(y)
     if Y.shape[1] == 1:
         Y = np.append(1 - Y, Y, axis=1)
@@ -168,7 +208,7 @@ def chi2(X, y):
     class_prob = array2d(Y.mean(axis=0))
     expected = np.dot(class_prob.T, feature_count)
 
-    return stats.chisquare(observed, expected)
+    return _chisquare(observed, expected)
 
 
 def f_regression(X, y, center=True):
@@ -187,6 +227,7 @@ def f_regression(X, y, center=True):
     ----------
     X : {array-like, sparse matrix}  shape = (n_samples, n_features)
         The set of regressors that will tested sequentially.
+
     y : array of shape(n_samples).
         The data matrix
 
@@ -197,6 +238,7 @@ def f_regression(X, y, center=True):
     -------
     F : array, shape=(n_features,)
         F values of features.
+
     pval : array, shape=(n_features,)
         p-values of F-scores.
     """
@@ -222,10 +264,10 @@ def f_regression(X, y, center=True):
 
 
 ######################################################################
-# General class for filter univariate selection
+# Base classes
 
-class _AbstractUnivariateFilter(BaseEstimator, TransformerMixin):
-    __metaclass__ = ABCMeta
+class _BaseFilter(six.with_metaclass(ABCMeta, BaseEstimator,
+                                     SelectorMixin)):
 
     def __init__(self, score_func):
         """ Initialize the univariate feature selection.
@@ -238,61 +280,53 @@ class _AbstractUnivariateFilter(BaseEstimator, TransformerMixin):
         """
         if not callable(score_func):
             raise TypeError(
-                "The score function should be a callable, %r "
+                "The score function should be a callable, %s (%s) "
                 "was passed." % (score_func, type(score_func)))
         self.score_func = score_func
 
+    @abstractmethod
     def fit(self, X, y):
-        """
-        Evaluate the function
+        """Run score function on (X, y) and get the appropriate features."""
+
+
+class _PvalueFilter(_BaseFilter):
+    def fit(self, X, y):
+        """Evaluate the score function on samples X with outputs y.
+
+        Records and selects features according to the p-values output by the
+        score function.
         """
         self.scores_, self.pvalues_ = self.score_func(X, y)
+        self.scores_ = np.asarray(self.scores_)
+        self.pvalues_ = np.asarray(self.pvalues_)
         if len(np.unique(self.pvalues_)) < len(self.pvalues_):
             warn("Duplicate p-values. Result may depend on feature ordering."
                  "There are probably duplicate features, or you used a "
                  "classification score for a regression task.")
         return self
 
-    def get_support(self, indices=False):
-        """
-        Return a mask, or list, of the features/indices selected.
-        """
-        mask = self._get_support_mask()
-        return mask if not indices else np.where(mask)[0]
 
-    @abstractmethod
-    def _get_support_mask(self):
-        """
-        Must return a boolean mask indicating which features are selected.
-        """
+class _ScoreFilter(_BaseFilter):
+    def fit(self, X, y):
+        """Evaluate the score function on samples X with outputs y.
 
-    def transform(self, X):
+        Records and selects features according to their scores.
         """
-        Transform a new matrix using the selected features
-        """
-        X = atleast2d_or_csr(X)
-        mask = self._get_support_mask()
-        if len(mask) != X.shape[1]:
-            raise ValueError("X has a different shape than during fitting.")
-        return atleast2d_or_csr(X)[:, safe_mask(X, mask)]
-
-    def inverse_transform(self, X):
-        """
-        Transform a new matrix using the selected features
-        """
-        support_ = self.get_support()
-        if X.ndim == 1:
-            X = X[None, :]
-        Xt = np.zeros((X.shape[0], support_.size))
-        Xt[:, support_] = X
-        return Xt
+        self.scores_, self.pvalues_ = self.score_func(X, y)
+        self.scores_ = np.asarray(self.scores_)
+        self.pvalues_ = np.asarray(self.pvalues_)
+        if len(np.unique(self.scores_)) < len(self.scores_):
+            warn("Duplicate scores. Result may depend on feature ordering."
+                 "There are probably duplicate features, or you used a "
+                 "classification score for a regression task.")
+        return self
 
 
 ######################################################################
 # Specific filters
 ######################################################################
 
-class SelectPercentile(_AbstractUnivariateFilter):
+class SelectPercentile(_ScoreFilter):
     """Select features according to a percentile of the highest scores.
 
     Parameters
@@ -306,15 +340,15 @@ class SelectPercentile(_AbstractUnivariateFilter):
 
     Attributes
     ----------
-    scores_ : array-like, shape=(n_features,)
+    `scores_` : array-like, shape=(n_features,)
         Scores of features.
 
-    pvalues_ : array-like, shape=(n_features,)
+    `pvalues_` : array-like, shape=(n_features,)
         p-values of feature scores.
 
     Notes
     -----
-    Ties between features with equal p-values will be broken in an unspecified
+    Ties between features with equal scores will be broken in an unspecified
     way.
 
     """
@@ -336,18 +370,19 @@ class SelectPercentile(_AbstractUnivariateFilter):
             return np.ones(len(self.scores_), dtype=np.bool)
         elif percentile == 0:
             return np.zeros(len(self.scores_), dtype=np.bool)
-        alpha = stats.scoreatpercentile(self.scores_, 100 - percentile)
-        # XXX refactor the indices -> mask -> indices -> mask thing
-        inds = np.where(self.scores_ >= alpha)[0]
-        # if we selected too many features because of equal scores,
-        # we throw them away now
-        inds = inds[:len(self.scores_) * percentile // 100]
-        mask = np.zeros(self.scores_.shape, dtype=np.bool)
-        mask[inds] = True
+        scores = _clean_nans(self.scores_)
+
+        alpha = stats.scoreatpercentile(scores, 100 - percentile)
+        mask = scores > alpha
+        ties = np.where(scores == alpha)[0]
+        if len(ties):
+            max_feats = len(scores) * percentile // 100
+            kept_ties = ties[:max_feats - mask.sum()]
+            mask[kept_ties] = True
         return mask
 
 
-class SelectKBest(_AbstractUnivariateFilter):
+class SelectKBest(_ScoreFilter):
     """Select features according to the k highest scores.
 
     Parameters
@@ -356,15 +391,16 @@ class SelectKBest(_AbstractUnivariateFilter):
         Function taking two arrays X and y, and returning a pair of arrays
         (scores, pvalues).
 
-    k : int, optional, default=10
+    k : int or "all", optional, default=10
         Number of top features to select.
+        The "all" option bypasses selection, for use in a parameter search.
 
     Attributes
     ----------
-    scores_ : array-like, shape=(n_features,)
+    `scores_` : array-like, shape=(n_features,)
         Scores of features.
 
-    pvalues_ : array-like, shape=(n_features,)
+    `pvalues_` : array-like, shape=(n_features,)
         p-values of feature scores.
 
     Notes
@@ -380,19 +416,23 @@ class SelectKBest(_AbstractUnivariateFilter):
 
     def _get_support_mask(self):
         k = self.k
+        if k == 'all':
+            return np.ones(self.scores_.shape, dtype=bool)
         if k > len(self.scores_):
-            raise ValueError("cannot select %d features among %d"
+            raise ValueError("Cannot select %d features among %d. "
+                             "Use k='all' to return all features."
                              % (k, len(self.scores_)))
 
+        scores = _clean_nans(self.scores_)
         # XXX This should be refactored; we're getting an array of indices
         # from argsort, which we transform to a mask, which we probably
         # transform back to indices later.
-        mask = np.zeros(self.scores_.shape, dtype=bool)
-        mask[np.argsort(self.scores_)[-k:]] = 1
+        mask = np.zeros(scores.shape, dtype=bool)
+        mask[np.argsort(scores)[-k:]] = 1
         return mask
 
 
-class SelectFpr(_AbstractUnivariateFilter):
+class SelectFpr(_PvalueFilter):
     """Filter: Select the pvalues below alpha based on a FPR test.
 
     FPR test stands for False Positive Rate test. It controls the total
@@ -409,10 +449,10 @@ class SelectFpr(_AbstractUnivariateFilter):
 
     Attributes
     ----------
-    scores_ : array-like, shape=(n_features,)
+    `scores_` : array-like, shape=(n_features,)
         Scores of features.
 
-    pvalues_ : array-like, shape=(n_features,)
+    `pvalues_` : array-like, shape=(n_features,)
         p-values of feature scores.
     """
 
@@ -425,7 +465,7 @@ class SelectFpr(_AbstractUnivariateFilter):
         return self.pvalues_ < alpha
 
 
-class SelectFdr(_AbstractUnivariateFilter):
+class SelectFdr(_PvalueFilter):
     """Filter: Select the p-values for an estimated false discovery rate
 
     This uses the Benjamini-Hochberg procedure. ``alpha`` is the target false
@@ -443,10 +483,10 @@ class SelectFdr(_AbstractUnivariateFilter):
 
     Attributes
     ----------
-    scores_ : array-like, shape=(n_features,)
+    `scores_` : array-like, shape=(n_features,)
         Scores of features.
 
-    pvalues_ : array-like, shape=(n_features,)
+    `pvalues_` : array-like, shape=(n_features,)
         p-values of feature scores.
     """
 
@@ -461,7 +501,7 @@ class SelectFdr(_AbstractUnivariateFilter):
         return self.pvalues_ <= threshold
 
 
-class SelectFwe(_AbstractUnivariateFilter):
+class SelectFwe(_PvalueFilter):
     """Filter: Select the p-values corresponding to Family-wise error rate
 
     Parameters
@@ -475,10 +515,10 @@ class SelectFwe(_AbstractUnivariateFilter):
 
     Attributes
     ----------
-    scores_ : array-like, shape=(n_features,)
+    `scores_` : array-like, shape=(n_features,)
         Scores of features.
 
-    pvalues_ : array-like, shape=(n_features,)
+    `pvalues_` : array-like, shape=(n_features,)
         p-values of feature scores.
     """
 
@@ -495,7 +535,9 @@ class SelectFwe(_AbstractUnivariateFilter):
 # Generic filter
 ######################################################################
 
-class GenericUnivariateSelect(_AbstractUnivariateFilter):
+# TODO this class should fit on either p-values or scores,
+# depending on the mode.
+class GenericUnivariateSelect(_PvalueFilter):
     """Univariate feature selector with configurable strategy.
 
     Parameters
@@ -512,10 +554,10 @@ class GenericUnivariateSelect(_AbstractUnivariateFilter):
 
     Attributes
     ----------
-    scores_ : array-like, shape=(n_features,)
+    `scores_` : array-like, shape=(n_features,)
         Scores of features.
 
-    pvalues_ : array-like, shape=(n_features,)
+    `pvalues_` : array-like, shape=(n_features,)
         p-values of feature scores.
     """
 
@@ -527,16 +569,12 @@ class GenericUnivariateSelect(_AbstractUnivariateFilter):
                         }
 
     def __init__(self, score_func=f_classif, mode='percentile', param=1e-5):
-        if not callable(score_func):
-            raise TypeError(
-                "The score function should be a callable, %r (type %s) "
-                "was passed." % (score_func, type(score_func)))
         if mode not in self._selection_modes:
             raise ValueError(
                 "The mode passed should be one of %s, %r, (type %s) "
                 "was passed." % (
-                        self._selection_modes.keys(),
-                        mode, type(mode)))
+                    self._selection_modes.keys(),
+                    mode, type(mode)))
         super(GenericUnivariateSelect, self).__init__(score_func)
         self.mode = mode
         self.param = param

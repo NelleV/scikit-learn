@@ -1,16 +1,13 @@
 # Author: Alexandre Gramfort <alexandre.gramfort@inria.fr>
 #         Fabian Pedregosa <fabian.pedregosa@inria.fr>
 #
-# License: BSD Style.
+# License: BSD 3 clause
 
 import numpy as np
 
-from numpy.testing import assert_array_equal
-
-import nose
-
-from ..bayes import BayesianRidge, ARDRegression
-
+from sklearn.utils.testing import assert_array_equal
+from sklearn.utils.testing import SkipTest
+from sklearn.linear_model.bayes import BayesianRidge, ARDRegression
 from sklearn import datasets
 
 
@@ -18,7 +15,7 @@ def test_bayesian_on_diabetes():
     """
     Test BayesianRidge on diabetes
     """
-    raise nose.SkipTest("XFailed Test")
+    raise SkipTest("XFailed Test")
     diabetes = datasets.load_diabetes()
     X, y = diabetes.data, diabetes.target
 

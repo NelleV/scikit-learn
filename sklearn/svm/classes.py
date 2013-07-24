@@ -1,10 +1,11 @@
 from .base import BaseLibLinear, BaseSVC, BaseLibSVM
 from ..base import RegressorMixin
-from ..linear_model.base import LinearClassifierMixin
-from ..feature_selection.selector_mixin import SelectorMixin
+from ..linear_model.base import LinearClassifierMixin, SparseCoefMixin
+from ..feature_selection.from_model import _LearntSelectorMixin
 
 
-class LinearSVC(BaseLibLinear, LinearClassifierMixin, SelectorMixin):
+class LinearSVC(BaseLibLinear, LinearClassifierMixin, _LearntSelectorMixin,
+                SparseCoefMixin):
     """Linear Support Vector Classification.
 
     Similar to SVC with parameter kernel='linear', but implemented in terms of
@@ -33,7 +34,7 @@ class LinearSVC(BaseLibLinear, LinearClassifierMixin, SelectorMixin):
         Select the algorithm to either solve the dual or primal
         optimization problem. Prefer dual=False when n_samples > n_features.
 
-    tol: float, optional (default=1e-4)
+    tol : float, optional (default=1e-4)
         Tolerance for stopping criteria
 
     multi_class: string, 'ovr' or 'crammer_singer' (default='ovr')
@@ -44,7 +45,7 @@ class LinearSVC(BaseLibLinear, LinearClassifierMixin, SelectorMixin):
         While `crammer_singer` is interesting from an theoretical perspective
         as it is consistent it is seldom used in practice and rarely leads to
         better accuracy and is more expensive to compute.
-        If `crammer_singer` is choosen, the options loss, penalty and dual will
+        If `crammer_singer` is chosen, the options loss, penalty and dual will
         be ignored.
 
     fit_intercept : boolean, optional (default=True)
@@ -74,6 +75,11 @@ class LinearSVC(BaseLibLinear, LinearClassifierMixin, SelectorMixin):
         Enable verbose output. Note that this setting takes advantage of a
         per-process runtime setting in liblinear that, if enabled, may not work
         properly in a multithreaded context.
+
+    random_state: int seed, RandomState instance, or None (default)
+        The seed of the pseudo random number generator to use when
+        shuffling the data.
+
 
     Attributes
     ----------
@@ -155,15 +161,17 @@ class SVC(BaseSVC):
 
     kernel : string, optional (default='rbf')
          Specifies the kernel type to be used in the algorithm.
-         It must be one of 'linear', 'poly', 'rbf', 'sigmoid', 'precomputed'.
-         If none is given, 'rbf' will be used.
+         It must be one of 'linear', 'poly', 'rbf', 'sigmoid', 'precomputed' or
+         a callable.
+         If none is given, 'rbf' will be used. If a callable is given it is
+         used to precompute the kernel matrix.
 
     degree : int, optional (default=3)
-        Degree of kernel function.
-        It is significant only in 'poly' and 'sigmoid'.
+        Degree of the polynomial kernel function ('poly').
+        Ignored by all other kernels.
 
     gamma : float, optional (default=0.0)
-        Kernel coefficient for 'rbf' and 'poly'.
+        Kernel coefficient for 'rbf', 'poly' and 'sigm'.
         If gamma is 0.0 then 1/n_features will be used instead.
 
     coef0 : float, optional (default=0.0)
@@ -177,10 +185,10 @@ class SVC(BaseSVC):
     shrinking: boolean, optional (default=True)
         Whether to use the shrinking heuristic.
 
-    tol: float, optional (default=1e-3)
+    tol : float, optional (default=1e-3)
         Tolerance for stopping criterion.
 
-    cache_size: float, optional
+    cache_size : float, optional
         Specify the size of the kernel cache (in MB)
 
     class_weight : {dict, 'auto'}, optional
@@ -194,6 +202,9 @@ class SVC(BaseSVC):
         Enable verbose output. Note that this setting takes advantage of a
         per-process runtime setting in libsvm that, if enabled, may not work
         properly in a multithreaded context.
+
+    max_iter : int, optional (default=-1)
+        Hard limit on iterations within solver, or -1 for no limit.
 
     Attributes
     ----------
@@ -232,10 +243,10 @@ class SVC(BaseSVC):
     >>> clf = SVC()
     >>> clf.fit(X, y) #doctest: +NORMALIZE_WHITESPACE
     SVC(C=1.0, cache_size=200, class_weight=None, coef0=0.0, degree=3,
-            gamma=0.0, kernel='rbf', probability=False, shrinking=True,
-            tol=0.001, verbose=False)
+            gamma=0.0, kernel='rbf', max_iter=-1, probability=False,
+            shrinking=True, tol=0.001, verbose=False)
     >>> print(clf.predict([[-0.8, -1]]))
-    [ 1.]
+    [1]
 
     See also
     --------
@@ -243,7 +254,7 @@ class SVC(BaseSVC):
         Support Vector Machine for Regression implemented using libsvm.
 
     LinearSVC
-        Scalable Linear Support Vector Machine for classififcation
+        Scalable Linear Support Vector Machine for classification
         implemented using liblinear. Check the See also section of
         LinearSVC for more comparison element.
 
@@ -252,11 +263,11 @@ class SVC(BaseSVC):
     def __init__(self, C=1.0, kernel='rbf', degree=3, gamma=0.0,
                  coef0=0.0, shrinking=True, probability=False,
                  tol=1e-3, cache_size=200, class_weight=None,
-                 verbose=False):
+                 verbose=False, max_iter=-1):
 
-        super(SVC, self).__init__('c_svc', kernel, degree, gamma, coef0, tol,
-                C, 0., 0., shrinking, probability, cache_size, "auto",
-                class_weight, verbose)
+        super(SVC, self).__init__(
+            'c_svc', kernel, degree, gamma, coef0, tol, C, 0., 0., shrinking,
+            probability, cache_size, class_weight, verbose, max_iter)
 
 
 class NuSVC(BaseSVC):
@@ -276,8 +287,10 @@ class NuSVC(BaseSVC):
 
     kernel : string, optional (default='rbf')
          Specifies the kernel type to be used in the algorithm.
-         one of 'linear', 'poly', 'rbf', 'sigmoid', 'precomputed'.
-         If none is given 'rbf' will be used.
+         It must be one of 'linear', 'poly', 'rbf', 'sigmoid', 'precomputed' or
+         a callable.
+         If none is given, 'rbf' will be used. If a callable is given it is
+         used to precompute the kernel matrix.
 
     degree : int, optional (default=3)
         degree of kernel function
@@ -298,24 +311,19 @@ class NuSVC(BaseSVC):
     shrinking: boolean, optional (default=True)
         Whether to use the shrinking heuristic.
 
-    tol: float, optional (default=1e-3)
+    tol : float, optional (default=1e-3)
         Tolerance for stopping criterion.
 
-    cache_size: float, optional
+    cache_size : float, optional
         Specify the size of the kernel cache (in MB)
-
-    class_weight : {dict, 'auto'}, optional
-        Set the parameter C of class i to class_weight[i]*C for
-        SVC. If not given, all classes are supposed to have
-        weight one. The 'auto' mode uses the values of y to
-        automatically adjust weights inversely proportional to
-        class frequencies.
 
     verbose : bool, default: False
         Enable verbose output. Note that this setting takes advantage of a
         per-process runtime setting in libsvm that, if enabled, may not work
         properly in a multithreaded context.
 
+    max_iter : int, optional (default=-1)
+        Hard limit on iterations within solver, or -1 for no limit.
 
     Attributes
     ----------
@@ -352,11 +360,12 @@ class NuSVC(BaseSVC):
     >>> y = np.array([1, 1, 2, 2])
     >>> from sklearn.svm import NuSVC
     >>> clf = NuSVC()
-    >>> clf.fit(X, y)
-    NuSVC(cache_size=200, coef0=0.0, degree=3, gamma=0.0, kernel='rbf', nu=0.5,
-       probability=False, shrinking=True, tol=0.001, verbose=False)
+    >>> clf.fit(X, y) #doctest: +NORMALIZE_WHITESPACE
+    NuSVC(cache_size=200, coef0=0.0, degree=3, gamma=0.0, kernel='rbf',
+            max_iter=-1, nu=0.5, probability=False, shrinking=True, tol=0.001,
+            verbose=False)
     >>> print(clf.predict([[-0.8, -1]]))
-    [ 1.]
+    [1]
 
     See also
     --------
@@ -370,11 +379,11 @@ class NuSVC(BaseSVC):
 
     def __init__(self, nu=0.5, kernel='rbf', degree=3, gamma=0.0,
                  coef0=0.0, shrinking=True, probability=False,
-                 tol=1e-3, cache_size=200, verbose=False):
+                 tol=1e-3, cache_size=200, verbose=False, max_iter=-1):
 
-        super(NuSVC, self).__init__('nu_svc', kernel, degree, gamma, coef0,
-                tol, 0., nu, 0., shrinking, probability, cache_size,
-                "auto", None, verbose)
+        super(NuSVC, self).__init__(
+            'nu_svc', kernel, degree, gamma, coef0, tol, 0., nu, 0., shrinking,
+            probability, cache_size, None, verbose, max_iter)
 
 
 class SVR(BaseLibSVM, RegressorMixin):
@@ -397,8 +406,10 @@ class SVR(BaseLibSVM, RegressorMixin):
 
     kernel : string, optional (default='rbf')
          Specifies the kernel type to be used in the algorithm.
-         one of 'linear', 'poly', 'rbf', 'sigmoid', 'precomputed'.
-         If none is given 'rbf' will be used.
+         It must be one of 'linear', 'poly', 'rbf', 'sigmoid', 'precomputed' or
+         a callable.
+         If none is given, 'rbf' will be used. If a callable is given it is
+         used to precompute the kernel matrix.
 
     degree : int, optional (default=3)
         degree of kernel function
@@ -419,16 +430,19 @@ class SVR(BaseLibSVM, RegressorMixin):
     shrinking: boolean, optional (default=True)
         Whether to use the shrinking heuristic.
 
-    tol: float, optional (default=1e-3)
+    tol : float, optional (default=1e-3)
         Tolerance for stopping criterion.
 
-    cache_size: float, optional
+    cache_size : float, optional
         Specify the size of the kernel cache (in MB)
 
     verbose : bool, default: False
         Enable verbose output. Note that this setting takes advantage of a
         per-process runtime setting in libsvm that, if enabled, may not work
         properly in a multithreaded context.
+
+    max_iter : int, optional (default=-1)
+        Hard limit on iterations within solver, or -1 for no limit.
 
     Attributes
     ----------
@@ -460,9 +474,9 @@ class SVR(BaseLibSVM, RegressorMixin):
     >>> y = np.random.randn(n_samples)
     >>> X = np.random.randn(n_samples, n_features)
     >>> clf = SVR(C=1.0, epsilon=0.2)
-    >>> clf.fit(X, y)
+    >>> clf.fit(X, y) #doctest: +NORMALIZE_WHITESPACE
     SVR(C=1.0, cache_size=200, coef0=0.0, degree=3, epsilon=0.2, gamma=0.0,
-      kernel='rbf', probability=False, shrinking=True, tol=0.001,
+      kernel='rbf', max_iter=-1, probability=False, shrinking=True, tol=0.001,
       verbose=False)
 
     See also
@@ -473,12 +487,13 @@ class SVR(BaseLibSVM, RegressorMixin):
 
     """
     def __init__(self, kernel='rbf', degree=3, gamma=0.0, coef0=0.0, tol=1e-3,
-            C=1.0, epsilon=0.1, shrinking=True, probability=False,
-            cache_size=200, verbose=False):
+                 C=1.0, epsilon=0.1, shrinking=True, probability=False,
+                 cache_size=200, verbose=False, max_iter=-1):
 
-        super(SVR, self).__init__('epsilon_svr', kernel, degree, gamma, coef0,
-                tol, C, 0., epsilon, shrinking, probability, cache_size,
-                "auto", None, verbose)
+        super(SVR, self).__init__(
+            'epsilon_svr', kernel, degree, gamma, coef0, tol, C, 0., epsilon,
+            shrinking, probability, cache_size, None, verbose,
+            max_iter)
 
 
 class NuSVR(BaseLibSVM, RegressorMixin):
@@ -502,8 +517,10 @@ class NuSVR(BaseLibSVM, RegressorMixin):
 
     kernel : string, optional (default='rbf')
          Specifies the kernel type to be used in the algorithm.
-         one of 'linear', 'poly', 'rbf', 'sigmoid', 'precomputed'.
-         If none is given 'rbf' will be used.
+         It must be one of 'linear', 'poly', 'rbf', 'sigmoid', 'precomputed' or
+         a callable.
+         If none is given, 'rbf' will be used. If a callable is given it is
+         used to precompute the kernel matrix.
 
     degree : int, optional (default=3)
         degree of kernel function
@@ -524,16 +541,19 @@ class NuSVR(BaseLibSVM, RegressorMixin):
     shrinking: boolean, optional (default=True)
         Whether to use the shrinking heuristic.
 
-    tol: float, optional (default=1e-3)
+    tol : float, optional (default=1e-3)
         Tolerance for stopping criterion.
 
-    cache_size: float, optional
+    cache_size : float, optional
         Specify the size of the kernel cache (in MB)
 
     verbose : bool, default: False
         Enable verbose output. Note that this setting takes advantage of a
         per-process runtime setting in libsvm that, if enabled, may not work
         properly in a multithreaded context.
+
+    max_iter : int, optional (default=-1)
+        Hard limit on iterations within solver, or -1 for no limit.
 
     Attributes
     ----------
@@ -565,9 +585,10 @@ class NuSVR(BaseLibSVM, RegressorMixin):
     >>> y = np.random.randn(n_samples)
     >>> X = np.random.randn(n_samples, n_features)
     >>> clf = NuSVR(C=1.0, nu=0.1)
-    >>> clf.fit(X, y)
+    >>> clf.fit(X, y)  #doctest: +NORMALIZE_WHITESPACE
     NuSVR(C=1.0, cache_size=200, coef0=0.0, degree=3, gamma=0.0, kernel='rbf',
-       nu=0.1, probability=False, shrinking=True, tol=0.001, verbose=False)
+       max_iter=-1, nu=0.1, probability=False, shrinking=True, tol=0.001,
+       verbose=False)
 
     See also
     --------
@@ -582,11 +603,11 @@ class NuSVR(BaseLibSVM, RegressorMixin):
     def __init__(self, nu=0.5, C=1.0, kernel='rbf', degree=3,
                  gamma=0.0, coef0=0.0, shrinking=True,
                  probability=False, tol=1e-3, cache_size=200,
-                 verbose=False):
+                 verbose=False, max_iter=-1):
 
-        super(NuSVR, self).__init__('nu_svr', kernel, degree, gamma, coef0,
-                tol, C, nu, 0., shrinking, probability, cache_size,
-                "auto", None, verbose)
+        super(NuSVR, self).__init__(
+            'nu_svr', kernel, degree, gamma, coef0, tol, C, nu, 0., shrinking,
+            probability, cache_size, None, verbose, max_iter)
 
 
 class OneClassSVM(BaseLibSVM):
@@ -598,10 +619,12 @@ class OneClassSVM(BaseLibSVM):
 
     Parameters
     ----------
-    kernel : string, optional
-        Specifies the kernel type to be used in
-        the algorithm. Can be one of 'linear', 'poly', 'rbf', 'sigmoid',
-        'precomputed'. If none is given 'rbf' will be used.
+    kernel : string, optional (default='rbf')
+         Specifies the kernel type to be used in the algorithm.
+         It must be one of 'linear', 'poly', 'rbf', 'sigmoid', 'precomputed' or
+         a callable.
+         If none is given, 'rbf' will be used. If a callable is given it is
+         used to precompute the kernel matrix.
 
     nu : float, optional
         An upper bound on the fraction of training
@@ -620,19 +643,22 @@ class OneClassSVM(BaseLibSVM):
         Independent term in kernel function. It is only significant in
         poly/sigmoid.
 
-    tol: float, optional
+    tol : float, optional
         Tolerance for stopping criterion.
 
     shrinking: boolean, optional
         Whether to use the shrinking heuristic.
 
-    cache_size: float, optional
+    cache_size : float, optional
         Specify the size of the kernel cache (in MB)
 
     verbose : bool, default: False
         Enable verbose output. Note that this setting takes advantage of a
         per-process runtime setting in libsvm that, if enabled, may not work
         properly in a multithreaded context.
+
+    max_iter : int, optional (default=-1)
+        Hard limit on iterations within solver, or -1 for no limit.
 
     Attributes
     ----------
@@ -657,11 +683,12 @@ class OneClassSVM(BaseLibSVM):
 
     """
     def __init__(self, kernel='rbf', degree=3, gamma=0.0, coef0=0.0, tol=1e-3,
-                 nu=0.5, shrinking=True, cache_size=200, verbose=False):
+                 nu=0.5, shrinking=True, cache_size=200, verbose=False,
+                 max_iter=-1):
 
-        super(OneClassSVM, self).__init__('one_class', kernel, degree, gamma,
-                coef0, tol, 0., nu, 0., shrinking, False, cache_size,
-                "auto", None, verbose)
+        super(OneClassSVM, self).__init__(
+            'one_class', kernel, degree, gamma, coef0, tol, 0., nu, 0.,
+            shrinking, False, cache_size, None, verbose, max_iter)
 
     def fit(self, X, sample_weight=None, **params):
         """
@@ -684,5 +711,5 @@ class OneClassSVM(BaseLibSVM):
 
         """
         super(OneClassSVM, self).fit(X, [], sample_weight=sample_weight,
-                **params)
+                                     **params)
         return self

@@ -6,7 +6,7 @@ is called with the same input arguments.
 
 # Author: Gael Varoquaux <gael dot varoquaux at normalesup dot org>
 # Copyright (c) 2009 Gael Varoquaux
-# License: BSD Style, 3 clauses.
+# License: BSD 3 clause
 
 
 from __future__ import with_statement
@@ -22,15 +22,7 @@ import functools
 import traceback
 import warnings
 import inspect
-try:
-    # json is in the standard library for Python >= 2.6
-    import json
-except ImportError:
-    try:
-        import simplejson as json
-    except ImportError:
-        # Not the end of the world: we'll do without this functionality
-        json = None
+import json
 
 # Local imports
 from .hashing import hash
@@ -100,7 +92,7 @@ class MemorizedFunc(Logger):
             arrays cannot be read by memmapping.
         verbose: int, optional
             The verbosity flag, controls messages that are issued as
-            the function is revaluated.
+            the function is reevaluated.
     """
     #-------------------------------------------------------------------------
     # Public interface
@@ -123,7 +115,7 @@ class MemorizedFunc(Logger):
                 arguments.
             verbose: int, optional
                 Verbosity flag, controls the debug messages that are issued
-                as functions are revaluated. The higher, the more verbose
+                as functions are reevaluated. The higher, the more verbose
             timestamp: float, optional
                 The reference time from which times in tracing messages
                 are reported.
@@ -177,7 +169,7 @@ class MemorizedFunc(Logger):
                     t = time.time() - t0
                     _, name = get_func_name(self.func)
                     msg = '%s cache loaded - %s' % (name, format_time(t))
-                    print max(0, (80 - len(msg))) * '_' + msg
+                    print(max(0, (80 - len(msg))) * '_' + msg)
                 return out
             except Exception:
                 # XXX: Should use an exception logger
@@ -254,8 +246,8 @@ class MemorizedFunc(Logger):
         if old_func_code == func_code:
             return True
 
-        # We have differing code, is this because we are refering to
-        # differing functions, or because the function we are refering as
+        # We have differing code, is this because we are referring to
+        # differing functions, or because the function we are referring as
         # changed?
 
         if old_first_line == first_line == -1:
@@ -279,8 +271,9 @@ class MemorizedFunc(Logger):
                                     and os.path.exists(source_file)):
             _, func_name = get_func_name(self.func, resolv_alias=False)
             num_lines = len(func_code.split('\n'))
-            on_disk_func_code = file(source_file).readlines()[
-                    old_first_line - 1:old_first_line - 1 + num_lines - 1]
+            with open(source_file) as f:
+                on_disk_func_code = f.readlines()[
+                        old_first_line - 1:old_first_line - 1 + num_lines - 1]
             on_disk_func_code = ''.join(on_disk_func_code)
             if on_disk_func_code.rstrip() == old_func_code.rstrip():
                 warnings.warn(JobLibCollisionWarning(
@@ -319,14 +312,16 @@ class MemorizedFunc(Logger):
         start_time = time.time()
         output_dir, argument_hash = self.get_output_dir(*args, **kwargs)
         if self._verbose:
-            print self.format_call(*args, **kwargs)
+            print(self.format_call(*args, **kwargs))
         output = self.func(*args, **kwargs)
         self._persist_output(output, output_dir)
+        self._persist_input(output_dir, *args, **kwargs)
         duration = time.time() - start_time
         if self._verbose:
             _, name = get_func_name(self.func)
             msg = '%s - %s' % (name, format_time(duration))
-            print max(0, (80 - len(msg))) * '_' + msg
+            print(max(0, (80 - len(msg))) * '_' + msg)
+
         return output
 
     def format_call(self, *args, **kwds):
@@ -361,7 +356,7 @@ class MemorizedFunc(Logger):
             previous_length = len(arg)
             arg_str.append(arg)
         arg_str.extend(['%s=%s' % (v, self.format(i)) for v, i in
-                                    kwds.iteritems()])
+                                    kwds.items()])
         arg_str = ', '.join(arg_str)
 
         signature = '%s(%s)' % (name, arg_str)
@@ -377,7 +372,7 @@ class MemorizedFunc(Logger):
             filename = os.path.join(dir, 'output.pkl')
             numpy_pickle.dump(output, filename, compress=self.compress)
             if self._verbose > 10:
-                print 'Persisting in %s' % dir
+                print('Persisting in %s' % dir)
         except OSError:
             " Race condition in the creation of the directory "
 
@@ -388,18 +383,17 @@ class MemorizedFunc(Logger):
         argument_dict = filter_args(self.func, self.ignore,
                                     args, kwargs)
 
-        input_repr = dict((k, repr(v)) for k, v in argument_dict.iteritems())
-        if json is not None:
-            # This can fail do to race-conditions with multiple
-            # concurrent joblibs removing the file or the directory
-            try:
-                mkdirp(output_dir)
-                json.dump(
-                    input_repr,
-                    file(os.path.join(output_dir, 'input_args.json'), 'w'),
-                    )
-            except:
-                pass
+        input_repr = dict((k, repr(v)) for k, v in argument_dict.items())
+        # This can fail do to race-conditions with multiple
+        # concurrent joblibs removing the file or the directory
+        try:
+            mkdirp(output_dir)
+            json.dump(
+                input_repr,
+                file(os.path.join(output_dir, 'input_args.json'), 'w'),
+                )
+        except:
+            pass
         return input_repr
 
     def load_output(self, output_dir):
@@ -409,16 +403,16 @@ class MemorizedFunc(Logger):
         if self._verbose > 1:
             t = time.time() - self.timestamp
             if self._verbose < 10:
-                print '[Memory]% 16s: Loading %s...' % (
+                print('[Memory]% 16s: Loading %s...' % (
                                     format_time(t),
                                     self.format_signature(self.func)[0]
-                                    )
+                                    ))
             else:
-                print '[Memory]% 16s: Loading %s from %s' % (
+                print('[Memory]% 16s: Loading %s from %s' % (
                                     format_time(t),
                                     self.format_signature(self.func)[0],
                                     output_dir
-                                    )
+                                    ))
         filename = os.path.join(output_dir, 'output.pkl')
         return numpy_pickle.load(filename,
                                  mmap_mode=self.mmap_mode)
@@ -470,9 +464,9 @@ class Memory(Logger):
                 compressed arrays cannot be read by memmapping.
             verbose: int, optional
                 Verbosity flag, controls the debug messages that are issued
-                as functions are revaluated.
+                as functions are reevaluated.
         """
-        # XXX: Bad explaination of the None value of cachedir
+        # XXX: Bad explanation of the None value of cachedir
         Logger.__init__(self)
         self._verbose = verbose
         self.mmap_mode = mmap_mode

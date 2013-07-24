@@ -8,11 +8,11 @@ Demonstrate Gradient Boosting on the boston housing dataset.
 This example fits a Gradient Boosting model with least squares loss and
 500 regression trees of depth 4.
 """
-print __doc__
+print(__doc__)
 
 # Author: Peter Prettenhofer <peter.prettenhofer@gmail.com>
 #
-# License: BSD
+# License: BSD 3 clause
 
 import numpy as np
 import pylab as pl
@@ -33,7 +33,7 @@ X_test, y_test = X[offset:], y[offset:]
 ###############################################################################
 # Fit regression model
 params = {'n_estimators': 500, 'max_depth': 4, 'min_samples_split': 1,
-          'learn_rate': 0.01, 'loss': 'ls'}
+          'learning_rate': 0.01, 'loss': 'ls'}
 clf = ensemble.GradientBoostingRegressor(**params)
 
 clf.fit(X_train, y_train)

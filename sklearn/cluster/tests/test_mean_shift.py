@@ -4,11 +4,14 @@ Testing for mean shift clustering methods
 """
 
 import numpy as np
-from numpy.testing import assert_equal
-from nose.tools import assert_true
 
-from .. import MeanShift, mean_shift, estimate_bandwidth, get_bin_seeds
-from ...datasets.samples_generator import make_blobs
+from sklearn.utils.testing import assert_equal, assert_false, assert_true
+
+from sklearn.cluster import MeanShift
+from sklearn.cluster import mean_shift
+from sklearn.cluster import estimate_bandwidth
+from sklearn.cluster import get_bin_seeds
+from sklearn.datasets.samples_generator import make_blobs
 
 n_clusters = 3
 centers = np.array([[1, 1], [-1, -1], [1, -1]]) + 10
@@ -35,6 +38,13 @@ def test_mean_shift():
     labels_unique = np.unique(labels)
     n_clusters_ = len(labels_unique)
     assert_equal(n_clusters_, n_clusters)
+
+
+def test_unfitted():
+    """Non-regression: before fit, there should be not fitted attributes."""
+    ms = MeanShift()
+    assert_false(hasattr(ms, "cluster_centers_"))
+    assert_false(hasattr(ms, "labels_"))
 
 
 def test_bin_seeds():

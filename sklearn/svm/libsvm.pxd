@@ -24,6 +24,7 @@ cdef extern from "svm.h":
         double p	# for EPSILON_SVR
         int shrinking	# use the shrinking heuristics
         int probability # do probability estimates
+        int max_iter  # ceiling on Solver runtime
 
     cdef struct svm_problem:
         int l
@@ -32,9 +33,9 @@ cdef extern from "svm.h":
         double *W # instance weights
 
     char *svm_check_parameter(svm_problem *, svm_parameter *)
-    svm_model *svm_train(svm_problem *, svm_parameter *)
+    svm_model *svm_train(svm_problem *, svm_parameter *, int *) nogil
     void svm_free_and_destroy_model(svm_model** model_ptr_ptr)
-    void svm_cross_validation(svm_problem *, svm_parameter *, int nr_fold, double *target)
+    void svm_cross_validation(svm_problem *, svm_parameter *, int nr_fold, double *target) nogil
 
 
 cdef extern from "libsvm_helper.c":
@@ -42,7 +43,7 @@ cdef extern from "libsvm_helper.c":
     svm_node **dense_to_sparse (char *, np.npy_intp *)
     void set_parameter (svm_parameter *, int , int , int , double, double ,
                                   double , double , double , double,
-                                  double, int, int, int, char *, char *)
+                                  double, int, int, int, char *, char *, int)
     void set_problem (svm_problem *, char *, char *, char *, np.npy_intp *, int)
 
     svm_model *set_model (svm_parameter *, int, char *, np.npy_intp *,
@@ -53,9 +54,9 @@ cdef extern from "libsvm_helper.c":
     void copy_intercept (char *, svm_model *, np.npy_intp *)
     void copy_SV        (char *, svm_model *, np.npy_intp *)
     int copy_support (char *data, svm_model *model)
-    int copy_predict (char *, svm_model *, np.npy_intp *, char *)
-    int copy_predict_proba (char *, svm_model *, np.npy_intp *, char *)
-    int copy_predict_values(char *, svm_model *, np.npy_intp *, char *, int)
+    int copy_predict (char *, svm_model *, np.npy_intp *, char *) nogil
+    int copy_predict_proba (char *, svm_model *, np.npy_intp *, char *) nogil
+    int copy_predict_values(char *, svm_model *, np.npy_intp *, char *, int) nogil
     void copy_nSV     (char *, svm_model *)
     void copy_label   (char *, svm_model *)
     void copy_probA   (char *, svm_model *, np.npy_intp *)

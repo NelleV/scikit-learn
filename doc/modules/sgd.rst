@@ -65,7 +65,8 @@ for the training samples::
     SGDClassifier(alpha=0.0001, class_weight=None, epsilon=0.1, eta0=0.0,
            fit_intercept=True, l1_ratio=0.15, learning_rate='optimal',
            loss='hinge', n_iter=5, n_jobs=1, penalty='l2', power_t=0.5,
-           rho=None, seed=0, shuffle=False, verbose=0, warm_start=False)
+           random_state=None, rho=None, shuffle=False, verbose=0,
+           warm_start=False)
 
 
 After being fitted, the model can then be used to predict new values::
@@ -77,7 +78,7 @@ SGD fits a linear model to the training data. The member ``coef_`` holds
 the model parameters::
 
     >>> clf.coef_
-    array([[ 9.90090187,  9.90090187]])
+    array([[ 9.91080278,  9.91080278]])
 
 Member ``intercept_`` holds the intercept (aka offset or bias)::
 
@@ -90,7 +91,7 @@ hyperplane, is controlled by the parameter ``fit_intercept``.
 To get the signed distance to the hyperplane use :meth:`SGDClassifier.decision_function`::
 
     >>> clf.decision_function([[2., 2.]])
-    array([ 29.61357756])
+    array([ 29.65318117])
 
 The concrete loss function can be set via the ``loss``
 parameter. :class:`SGDClassifier` supports the following loss functions:
@@ -111,19 +112,20 @@ In the case of binary classification and ``loss="log"`` or
 
     >>> clf = SGDClassifier(loss="log").fit(X, y)
     >>> clf.predict_proba([[1., 1.]])
-    array([[ 0.00000051,  0.99999949]])
+    array([[ 0.0000005,  0.9999995]])
 
 The concrete penalty can be set via the ``penalty`` parameter.
 SGD supports the following penalties:
 
   * ``penalty="l2"``: L2 norm penalty on ``coef_``.
   * ``penalty="l1"``: L1 norm penalty on ``coef_``.
-  * ``penalty="elasticnet"``: Convex combination of L2 and L1; `rho * L2 + (1 - rho) * L1`.
+  * ``penalty="elasticnet"``: Convex combination of L2 and L1; `(1 - l1_ratio) * L2 + l1_ratio * L1`.
 
 The default setting is ``penalty="l2"``. The L1 penalty leads to sparse
 solutions, driving most coefficients to zero. The Elastic Net solves
 some deficiencies of the L1 penalty in the presence of highly correlated
-attributes. The parameter ``rho`` has to be specified by the user.
+attributes. The parameter ``l1_ratio`` controls the convex combination
+of L1 and L2 penalty.
 
 :class:`SGDClassifier` supports multi-class classification by combining
 multiple binary classifiers in a "one versus all" (OVA) scheme. For each
@@ -140,7 +142,7 @@ the decision surface induced by the three classifiers.
    :align: center
    :scale: 75
 
-In the case of multi-class classification ``coef_`` is a two-dimensionaly
+In the case of multi-class classification ``coef_`` is a two-dimensionally
 array of ``shape=[n_classes, n_features]`` and ``intercept_`` is a one
 dimensional array of ``shape=[n_classes]``. The i-th row of ``coef_`` holds
 the weight vector of the OVA classifier for the i-th class; classes are
@@ -187,10 +189,6 @@ The Huber and epsilon-insensitive loss functions can be used for
 robust regression. The width of the insensitive region has to be
 specified via the parameter ``epsilon``. This parameter depends on the
 scale of the target variables.
-
-.. topic:: Examples:
-
- - :ref:`example_linear_model_plot_sgd_ols.py`,
 
 
 Stochastic Gradient Descent for sparse data
@@ -300,7 +298,7 @@ Popular choices for the regularization term :math:`R` include:
    - L2 norm: :math:`R(w) := \frac{1}{2} \sum_{i=1}^{n} w_i^2`,
    - L1 norm: :math:`R(w) := \sum_{i=1}^{n} |w_i|`, which leads to sparse
      solutions.
-   - Elastic Net: :math:`R(w) := \rho \frac{1}{2} \sum_{i=1}^{n} w_i^2 + (1-\rho) \sum_{i=1}^{n} |w_i|`, a convex combination of L2 and L1.
+   - Elastic Net: :math:`R(w) := \rho \frac{1}{2} \sum_{i=1}^{n} w_i^2 + (1-\rho) \sum_{i=1}^{n} |w_i|`, a convex combination of L2 and L1, where :math:`\rho` is given by ``1 - l1_ratio``.
 
 The Figure below shows the contours of the different regularization terms
 in the parameter space when :math:`R(w) = 1`.
@@ -338,28 +336,28 @@ is given by
 
     \eta^{(t)} = \frac {1}{\alpha  (t_0 + t)}
 
-where :math:`t` is the time step (there are a total of `n_samples * epochs`
+where :math:`t` is the time step (there are a total of `n_samples * n_iter`
 time steps), :math:`t_0` is determined based on a heuristic proposed by Léon Bottou
 such that the expected initial updates are comparable with the expected
 size of the weights (this assuming that the norm of the training samples is
 approx. 1). The exact definition can be found in ``_init_t`` in :class:`BaseSGD`.
 
 
-For regression, the default learning rate schedule, inverse scaling
-(``learning_rate='invscaling'``), is given by
+For regression the default learning rate schedule is inverse scaling
+(``learning_rate='invscaling'``), given by
 
 .. math::
 
     \eta^{(t)} = \frac{eta_0}{t^{power\_t}}
 
-where :math:`eta_0` and :math:`power\_t` are hyperparameters choosen by the
+where :math:`eta_0` and :math:`power\_t` are hyperparameters chosen by the
 user via ``eta0`` and ``power_t``, resp.
 
 For a constant learning rate use ``learning_rate='constant'`` and use ``eta0``
 to specify the learning rate.
 
 The model parameters can be accessed through the members ``coef_`` and
-``intercept\_``:
+``intercept_``:
 
      - Member ``coef_`` holds the weights :math:`w`
 

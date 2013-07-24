@@ -3,12 +3,11 @@ from io import BytesIO
 import numpy as np
 import scipy.sparse
 
-from cStringIO import StringIO
-from numpy.testing import assert_almost_equal
-from numpy.testing import assert_array_equal
-from numpy.testing import assert_array_almost_equal
-from numpy.testing import assert_equal
-from nose.tools import assert_raises
+from sklearn.utils.testing import assert_almost_equal
+from sklearn.utils.testing import assert_array_equal
+from sklearn.utils.testing import assert_array_almost_equal
+from sklearn.utils.testing import assert_equal
+from sklearn.utils.testing import assert_raises
 
 from sklearn.naive_bayes import GaussianNB, BernoulliNB, MultinomialNB
 
@@ -92,15 +91,11 @@ def test_discretenb_pickle():
         clf = cls().fit(X2, y2)
         y_pred = clf.predict(X2)
 
-        store = StringIO()
+        store = BytesIO()
         pickle.dump(clf, store)
-        clf = pickle.load(StringIO(store.getvalue()))
+        clf = pickle.load(BytesIO(store.getvalue()))
 
         assert_array_equal(y_pred, clf.predict(X2))
-
-    store = BytesIO()
-    pickle.dump(clf, store)
-    clf = pickle.load(BytesIO(store.getvalue()))
 
 
 def test_input_check():
@@ -157,8 +152,8 @@ def test_discretenb_provide_prior():
     """Test whether discrete NB classes use provided prior"""
 
     for cls in [BernoulliNB, MultinomialNB]:
-        clf = cls()
-        clf.fit([[0], [0], [1]], [0, 0, 1], class_prior=[0.5, 0.5])
+        clf = cls(class_prior=[0.5, 0.5])
+        clf.fit([[0], [0], [1]], [0, 0, 1])
         prior = np.exp(clf.class_log_prior_)
         assert_array_equal(prior, np.array([.5, .5]))
 
@@ -169,6 +164,20 @@ def test_sample_weight():
             [0, 0, 1],
             sample_weight=[1, 1, 4])
     assert_array_equal(clf.predict([1, 0]), [1])
-    positive_prior = np.exp(clf.intercept_)
+    positive_prior = np.exp(clf.intercept_[0])
     assert_array_almost_equal([1 - positive_prior, positive_prior],
                               [1 / 3., 2 / 3.])
+
+
+def test_coef_intercept_shape():
+    """coef_ and intercept_ should have shapes as in other linear models.
+
+    Non-regression test for issue #2127.
+    """
+    X = [[1, 0, 0], [1, 1, 1]]
+    y = [1, 2]  # binary classification
+
+    for clf in [MultinomialNB(), BernoulliNB()]:
+        clf.fit(X, y)
+        assert_equal(clf.coef_.shape, (1, 3))
+        assert_equal(clf.intercept_.shape, (1,))

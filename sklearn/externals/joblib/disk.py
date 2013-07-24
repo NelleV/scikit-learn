@@ -5,7 +5,7 @@ Disk management utilities.
 # Authors: Gael Varoquaux <gael dot varoquaux at normalesup dot org>
 #          Lars Buitinck <L.J.Buitinck@uva.nl>
 # Copyright (c) 2010 Gael Varoquaux
-# License: BSD Style, 3 clauses.
+# License: BSD 3 clause
 
 
 import errno
@@ -52,7 +52,7 @@ def mkdirp(d):
     """
     try:
         os.makedirs(d)
-    except OSError, e:
+    except OSError as e:
         if e.errno != errno.EEXIST:
             raise
 
@@ -81,7 +81,7 @@ def rm_subdirs(path, onerror=None):
     names = []
     try:
         names = os.listdir(path)
-    except os.error, err:
+    except os.error as err:
         if onerror is not None:
             onerror(os.listdir, path, sys.exc_info())
         else:
@@ -100,7 +100,7 @@ def rm_subdirs(path, onerror=None):
                     try:
                         shutil.rmtree(fullname, False, None)
                         break
-                    except os.error, err:
+                    except os.error:
                         if err_count > 0:
                             raise
                         err_count += 1

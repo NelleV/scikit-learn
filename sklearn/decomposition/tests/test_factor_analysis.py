@@ -4,7 +4,9 @@
 
 import numpy as np
 
-from nose.tools import assert_true, assert_raises, assert_almost_equal
+from sklearn.utils.testing import assert_true
+from sklearn.utils.testing import assert_raises
+from sklearn.utils.testing import assert_almost_equal
 
 from sklearn.decomposition import FactorAnalysis
 
@@ -21,8 +23,7 @@ def test_factor_analysis():
     h = rng.randn(n_samples, n_components)
     # using gamma to model different noise variance
     # per component
-    noise = rng.gamma(1, size=n_features) \
-                * rng.randn(n_samples, n_features)
+    noise = rng.gamma(1, size=n_features) * rng.randn(n_samples, n_features)
 
     # generate observations
     # wlog, mean is 0

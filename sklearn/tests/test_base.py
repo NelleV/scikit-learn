@@ -1,19 +1,21 @@
 
 # Author: Gael Varoquaux
-# License: BSD
+# License: BSD 3 clause
 
 import numpy as np
 import scipy.sparse as sp
-from numpy.testing import assert_array_equal
 
-from nose.tools import assert_true
-from nose.tools import assert_false
-from nose.tools import assert_equal
-from nose.tools import assert_raises
+from sklearn.utils.testing import assert_array_equal
+from sklearn.utils.testing import assert_true
+from sklearn.utils.testing import assert_false
+from sklearn.utils.testing import assert_equal
+from sklearn.utils.testing import assert_raises
+
 from sklearn.base import BaseEstimator, clone, is_classifier
 from sklearn.svm import SVC
 from sklearn.pipeline import Pipeline
 from sklearn.grid_search import GridSearchCV
+from sklearn.utils import deprecated
 
 
 #############################################################################
@@ -35,6 +37,19 @@ class T(BaseEstimator):
     def __init__(self, a=None, b=None):
         self.a = a
         self.b = b
+
+
+class DeprecatedAttributeEstimator(BaseEstimator):
+    def __init__(self, a=None, b=None):
+        self.a = a
+        if b is not None:
+            DeprecationWarning("b is deprecated and renamed 'a'")
+            self.a = b
+
+    @property
+    @deprecated("Parameter 'b' is deprecated and renamed to 'a'")
+    def b(self):
+        return self._b
 
 
 class Buggy(BaseEstimator):
@@ -68,7 +83,7 @@ def test_clone():
     """Tests that clone creates a correct deep copy.
 
     We create an estimator, make a copy of its original state
-    (which, in this case, is the current state of the setimator),
+    (which, in this case, is the current state of the estimator),
     and check that the obtained copy is a correct deep copy.
 
     """
@@ -152,6 +167,19 @@ def test_get_params():
     test.set_params(a__d=2)
     assert_true(test.a.d == 2)
     assert_raises(ValueError, test.set_params, a__a=2)
+
+
+def test_get_params_deprecated():
+    # deprecated attribute should not show up as params
+    est = DeprecatedAttributeEstimator(a=1)
+
+    assert_true('a' in est.get_params())
+    assert_true('a' in est.get_params(deep=True))
+    assert_true('a' in est.get_params(deep=False))
+
+    assert_true('b' not in est.get_params())
+    assert_true('b' not in est.get_params(deep=True))
+    assert_true('b' not in est.get_params(deep=False))
 
 
 def test_is_classifier():
