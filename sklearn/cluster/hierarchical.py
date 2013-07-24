@@ -188,7 +188,6 @@ def ward_tree(X, connectivity=None, n_components=None, copy=None,
     _hierarchical.compute_ward_dist(moments_1, moments_2, coord_row, coord_col,
                                     inertia)
     inertia = list(six.moves.zip(inertia, coord_row, coord_col))
-    inertia = zip(inertia, coord_row, coord_col)
     heapify(inertia)
 
     # prepare the main fields
@@ -230,6 +229,7 @@ def ward_tree(X, connectivity=None, n_components=None, copy=None,
 
         _hierarchical.compute_ward_dist(moments_1, moments_2,
                                         coord_row, coord_col, ini)
+
         # List comprehension is faster than a for loop
         [heappush(inertia, (ini[idx], k, coord_col[idx]))
             for idx in xrange(n_additions)]
