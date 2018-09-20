@@ -338,8 +338,6 @@ class RANSACRegressor(BaseEstimator, MetaEstimatorMixin, RegressorMixin):
         n_samples = X.shape[0]
         sample_idxs = np.arange(n_samples)
 
-        n_samples, _ = X.shape
-
         self.n_trials_ = 0
         max_trials = self.max_trials
         while self.n_trials_ < max_trials:
